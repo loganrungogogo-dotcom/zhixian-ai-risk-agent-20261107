@@ -1,0 +1,17 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>智险可控 · 专家登录</title><style>
+*{box-sizing:border-box}body{margin:0;background:#f4f7f5;color:#243d32;font:16px/1.6 system-ui,sans-serif;min-height:100vh;display:grid;place-items:center}main{width:min(420px,calc(100% - 40px));padding:36px;background:white;border:1px solid #dbe5df;border-radius:12px}h1{font-size:26px;margin:0 0 8px}p{margin:0 0 24px;color:#53675c}label{display:block;margin:16px 0 6px}input,button{width:100%;font:inherit;padding:12px;border-radius:6px;border:1px solid #bdcec3}button{margin-top:24px;background:#315e49;color:white;cursor:pointer;border:0}button:disabled{opacity:.65}#status{margin:16px 0 0;font-size:14px}input:focus{outline:2px solid #749e88;outline-offset:2px}</style></head><body><main><h1>智险可控</h1><p>科创企业风险识别与管理</p><form id="login"><label for="account">账号</label><input id="account" name="username" autocomplete="username" required><label for="password">密码／访问码</label><input id="password" type="password" autocomplete="current-password" required><button id="submit">登录工作台</button><p id="status" role="status"></p></form></main><script>
+const bytes=value=>Uint8Array.from(atob(value),character=>character.charCodeAt(0));
+document.getElementById('login').addEventListener('submit',async event=>{
+event.preventDefault();const button=document.getElementById('submit'),status=document.getElementById('status');button.disabled=true;status.textContent='正在验证并载入工作台…';
+try{
+const response=await fetch(new URL('app.enc',location.href));if(!response.ok)throw new Error('fetch');
+const payload=await response.json();
+const account=document.getElementById('account').value.trim(),password=document.getElementById('password').value.trim();
+const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(account+'\n'+password),'PBKDF2',false,['deriveKey']);
+const key=await crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt:bytes(payload.salt),iterations:payload.iterations},material,{name:'AES-GCM',length:256},false,['decrypt']);
+const decrypted=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(payload.iv)},key,bytes(payload.data));
+localStorage.setItem('zhixian-20261107-session','1');
+const app=new TextDecoder().decode(decrypted);document.open();document.write(app);document.close();
+}catch(error){status.textContent=error.name==='OperationError'?'账号或密码不正确，请重试。':'加载失败，请检查网络或浏览器设置后重试。';button.disabled=false;}
+});
+</script></body></html>
