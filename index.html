@@ -2,16 +2,38 @@
 *{box-sizing:border-box}body{margin:0;background:#f4f7f5;color:#243d32;font:16px/1.6 system-ui,sans-serif;min-height:100vh;display:grid;place-items:center}main{width:min(420px,calc(100% - 40px));padding:36px;background:white;border:1px solid #dbe5df;border-radius:12px}h1{font-size:26px;margin:0 0 8px}p{margin:0 0 24px;color:#53675c}label{display:block;margin:16px 0 6px}input,button{width:100%;font:inherit;padding:12px;border-radius:6px;border:1px solid #bdcec3}button{margin-top:24px;background:#315e49;color:white;cursor:pointer;border:0}button:disabled{opacity:.65}#status{margin:16px 0 0;font-size:14px}input:focus{outline:2px solid #749e88;outline-offset:2px}</style></head><body><main><h1>智险可控</h1><p>科创企业风险识别与管理</p><form id="login"><label for="account">账号</label><input id="account" name="username" autocomplete="username" required><label for="password">密码／访问码</label><input id="password" type="password" autocomplete="current-password" required><button id="submit">登录工作台</button><p id="status" role="status"></p></form></main><script>
 const bytes=value=>Uint8Array.from(atob(value),character=>character.charCodeAt(0));
 document.getElementById('login').addEventListener('submit',async event=>{
-event.preventDefault();const button=document.getElementById('submit'),status=document.getElementById('status');button.disabled=true;status.textContent='正在验证并载入工作台…';
-try{
-const response=await fetch(new URL('app.enc',location.href));if(!response.ok)throw new Error('fetch');
-const payload=await response.json();
-const account=document.getElementById('account').value.trim(),password=document.getElementById('password').value.trim();
-const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(account+'\n'+password),'PBKDF2',false,['deriveKey']);
-const key=await crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt:bytes(payload.salt),iterations:payload.iterations},material,{name:'AES-GCM',length:256},false,['decrypt']);
-const decrypted=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(payload.iv)},key,bytes(payload.data));
-localStorage.setItem('zhixian-20261107-session','1');
-const app=new TextDecoder().decode(decrypted);document.open();document.write(app);document.close();
-}catch(error){status.textContent=error.name==='OperationError'?'账号或密码不正确，请重试。':'加载失败，请检查网络或浏览器设置后重试。';button.disabled=false;}
+ event.preventDefault();
+ const button=document.getElementById('submit'),status=document.getElementById('status');
+ const account=document.getElementById('account').value.trim(),password=document.getElementById('password').value.trim();
+ button.disabled=true;button.textContent='正在载入…';
+ const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),60000);
+ let stage='download';
+ try{
+  if(!crypto.subtle)throw new Error('当前浏览器不支持加密登录，请使用新版Chrome或Edge。');
+  status.textContent='正在连接工作台…';
+  const response=await fetch(new URL('app.enc',location.href),{signal:controller.signal});
+  if(!response.ok)throw new Error('程序下载失败（HTTP '+response.status+'），请稍后重试。');
+  const reader=response.body.getReader();let length=0;const chunks=[];
+  while(true){const item=await reader.read();if(item.done)break;chunks.push(item.value);length+=item.value.length;status.textContent='正在下载程序 '+(length/1024/1024).toFixed(1)+' MB…';}
+  clearTimeout(timer);
+  const data=new Uint8Array(length);let offset=0;for(const chunk of chunks){data.set(chunk,offset);offset+=chunk.length;}
+  const payload=JSON.parse(new TextDecoder().decode(data));stage='decrypt';status.textContent='下载完成，正在验证账号…';
+  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(account+'\n'+password),'PBKDF2',false,['deriveKey']);
+  const key=await crypto.subtle.deriveKey({name:'PBKDF2',hash:'SHA-256',salt:bytes(payload.salt),iterations:payload.iterations},material,{name:'AES-GCM',length:256},false,['decrypt']);
+  let decoded=await crypto.subtle.decrypt({name:'AES-GCM',iv:bytes(payload.iv)},key,bytes(payload.data));
+  stage='unpack';status.textContent='账号验证通过，正在打开工作台…';
+  if(payload.compression==='gzip'){
+   if(typeof DecompressionStream==='undefined')throw new Error('当前浏览器版本较旧，请使用新版Chrome或Edge。');
+   decoded=await new Response(new Blob([decoded]).stream().pipeThrough(new DecompressionStream('gzip'))).arrayBuffer();
+  }
+  stage='storage';localStorage.setItem('zhixian-20261107-session','1');
+  const app=new TextDecoder().decode(decoded);document.open();document.write(app);document.close();
+ }catch(error){
+  if(error.name==='OperationError'&&stage==='decrypt')status.textContent='账号或密码不正确，请重试。';
+  else if(error.name==='AbortError')status.textContent='程序下载超过60秒，请更换网络或稍后重试。';
+  else if(stage==='storage')status.textContent='浏览器未允许保存本地记录，请检查隐私设置后重试。';
+  else status.textContent=error instanceof TypeError?'程序连接中断，请检查网络后重试。':error.message||'载入失败，请稍后重试。';
+  button.disabled=false;button.textContent='重新登录';
+ }finally{clearTimeout(timer);}
 });
 </script></body></html>
