@@ -11,7 +11,7 @@ document.getElementById('login').addEventListener('submit',async event=>{
  try{
   if(!crypto.subtle)throw new Error('当前浏览器不支持加密登录，请使用新版Chrome或Edge。');
   status.textContent='正在连接工作台…';
-  const response=await fetch(new URL('app-745044359d75a7e5.enc',location.href),{signal:controller.signal});
+  const response=await fetch(new URL('app-bfd3f1964a98929c.enc',location.href),{signal:controller.signal});
   if(!response.ok)throw new Error('程序下载失败（HTTP '+response.status+'），请稍后重试。');
   const reader=response.body.getReader();let length=0;const chunks=[];
   while(true){const item=await reader.read();if(item.done)break;chunks.push(item.value);length+=item.value.length;status.textContent='正在下载程序 '+(length/1024/1024).toFixed(1)+' MB…';}
